@@ -17,6 +17,8 @@ output/*
 !output/.gitkeep
 input/*
 !input/.gitkeep
+ref/*
+!ref/.gitkeep
 
 # IDEs
 .idea/
