@@ -185,42 +185,52 @@ def build_profile_face(params: ProfileParams) -> Face:
     Build complete profile face from parameters using build123d.
     
     Creates a polygon on X-Y plane and returns as Face.
-    Applies proper fillets for R1 and R2 relative to sharp corners.
+    Uses explicit TangentArc for R1 and R2 to ensure valid STEP geometry.
     """
     vertices = compute_vertices(params)
     
-    # Reconstruct sharp polygon for filleting
-    # P0..P10 are kept (up to Corner 1)
-    # P11, P12, P13 are removed (they assume manual chamfer/segmentation)
-    # Corner 2 is calculated as intersection of shelf line and vertical wall
-    # P14..P15 are kept
+    # Vertices indices:
+    # 0-9: Standard profile path
+    # 10: R1 Corner (Sharp)
+    # 11: R1 End Tangent
+    # 12: R2 Start Tangent
+    # 13: R2 End Tangent
+    # 14-15: Closing path
     
-    p10 = vertices[10] # Corner 1 (R1)
-    p14 = vertices[14] # Top of vertical wall
+    p9 = vertices[9]
+    p10 = vertices[10] # Corner 1
+    p11 = vertices[11] # End of R1
+    p12 = vertices[12] # Start of R2
+    p13 = vertices[13] # End of R2
     
-    # Corner 2 is at (P14.x, P10.y) -> (0, Shelf_Level)
-    corner2_x = p14[0]
-    corner2_y = p10[1]
-    corner2 = (corner2_x, corner2_y)
-    
-    # Sharp vertex list
-    # indices 0-10, then Corner2, then 14-15
-    sharp_verts = vertices[:11] + [corner2] + vertices[14:]
+    # Calculate Start of R1 (on vertical segment P9->P10)
+    # P9 is above P10. We stop R1 short of P10.
+    p_r1_start = (p10[0], p10[1] + params.R1)
     
     with BuildSketch() as sketch:
         with BuildLine():
-            Polyline(sharp_verts, close=True)
+            # 1. P0 to P9 (and down to R1 start)
+            # vertices[0:10] gives P0..P9. 
+            # We add p_r1_start to this chain.
+            Polyline(vertices[:10] + [p_r1_start])
+            
+            # 2. Arc for R1 (90 deg turn) using TangentArc
+            # From p_r1_start to p11
+            TangentArc(p11)
+            
+            # 3. Line segment between fillets (P11 -> P12)
+            # This is the horizontal shelf floor
+            # Polyline needs a list, or Line for single segment
+            Polyline([p11, p12])
+            
+            # 4. Arc for R2 (90 deg turn)
+            # From P12 to P13
+            TangentArc(p13)
+            
+            # 5. Remaining path P13 -> P14 -> P15 -> P0 (close)
+            Polyline([p13] + vertices[14:] + [vertices[0]])
+
         make_face()
-        
-        # Apply R1 fillet at P10
-        # We find vertex at p10 coordinates
-        v_r1 = sketch.vertices().sort_by_distance(p10)[0]
-        fillet(v_r1, radius=params.R1)
-        
-        # Apply R2 fillet at Corner2
-        # We find vertex at corner2 coordinates
-        v_r2 = sketch.vertices().sort_by_distance(corner2)[0]
-        fillet(v_r2, radius=params.R2)
     
     return sketch.sketch
 
