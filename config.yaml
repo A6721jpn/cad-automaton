@@ -4,62 +4,62 @@ files:
     parameters:
       L1:
         description: top_inner_y
-        value: 0.4060330445686443
+        value: 0.775
         min: 0.1
         max: 2.0
       L2:
         description: top_outer_y
-        value: 1.9235604350851843
+        value: 0.85
         min: 0.1
         max: 2.0
       L3:
         description: top_z
-        value: 1.3966635883561136
+        value: 0.943
         min: 0.1
         max: 2.0
       L4:
         description: upper_step_y
-        value: 0.8000915416846294
+        value: 0.3684
         min: 0.1
         max: 1.0
       L5:
         description: outer_y
-        value: 1.3169872993030947
+        value: 0.775
         min: 0.1
         max: 2.0
       L6:
         description: outer_z
-        value: 0.7152785546126982
+        value: 0.6188
         min: 0.1
         max: 2.0
       L7:
         description: lower_step_z
-        value: 0.3072901309938114
+        value: 0.6309
         min: 0.1
         max: 2.0
       L8:
         description: inner_shelf_y
-        value: 0.2791110960718911
+        value: 0.6575
         min: 0.1
         max: 2.0
       L9:
         description: inner_shelf_z
-        value: 0.9701224450551476
+        value: 0.4476
         min: 0.1
         max: 1.5
       L10:
         description: bottom_z
-        value: 0.7486096739002936
+        value: 1.3087
         min: 0.3
         max: 3.0
       R1:
         description: fillet_inner
-        value: 0.05968799887455478
+        value: 0.25
         min: 0.05
         max: 0.5
       R2:
         description: fillet_bottom
-        value: 0.19758303182315423
+        value: 0.06
         min: 0.05
         max: 0.5
     constraints:

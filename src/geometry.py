@@ -16,6 +16,9 @@ from build123d import (
     Face,
     export_step,
     Plane,
+    BuildLine,
+    Polyline,
+    fillet,
 )
 
 
@@ -182,14 +185,43 @@ def build_profile_face(params: ProfileParams) -> Face:
     Build complete profile face from parameters using build123d.
     
     Creates a polygon on X-Y plane and returns as Face.
+    Applies proper fillets for R1 and R2 relative to sharp corners.
     """
     vertices = compute_vertices(params)
     
-    # Build sketch with polygon
-    with BuildSketch() as sketch:
-        Polygon(*vertices, align=None)
+    # Reconstruct sharp polygon for filleting
+    # P0..P10 are kept (up to Corner 1)
+    # P11, P12, P13 are removed (they assume manual chamfer/segmentation)
+    # Corner 2 is calculated as intersection of shelf line and vertical wall
+    # P14..P15 are kept
     
-    # Return the sketch as a face
+    p10 = vertices[10] # Corner 1 (R1)
+    p14 = vertices[14] # Top of vertical wall
+    
+    # Corner 2 is at (P14.x, P10.y) -> (0, Shelf_Level)
+    corner2_x = p14[0]
+    corner2_y = p10[1]
+    corner2 = (corner2_x, corner2_y)
+    
+    # Sharp vertex list
+    # indices 0-10, then Corner2, then 14-15
+    sharp_verts = vertices[:11] + [corner2] + vertices[14:]
+    
+    with BuildSketch() as sketch:
+        with BuildLine():
+            Polyline(sharp_verts, close=True)
+        make_face()
+        
+        # Apply R1 fillet at P10
+        # We find vertex at p10 coordinates
+        v_r1 = sketch.vertices().sort_by_distance(p10)[0]
+        fillet(v_r1, radius=params.R1)
+        
+        # Apply R2 fillet at Corner2
+        # We find vertex at corner2 coordinates
+        v_r2 = sketch.vertices().sort_by_distance(corner2)[0]
+        fillet(v_r2, radius=params.R2)
+    
     return sketch.sketch
 
 

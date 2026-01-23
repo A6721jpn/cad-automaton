@@ -39,9 +39,10 @@ def get_input_step_files(input_dir: Path) -> List[Path]:
     return sorted(step_files)
 
 
-def run_recognition_mode(input_dir: Path, config_path: Path) -> int:
+def run_recognition_mode(input_dir: Path, config_path: Path, output_dir: Path) -> int:
     """
     Recognition mode (-r): Extract dimensions and generate config YAML.
+    Also generates dimensioned images in output_dir.
     """
     logger.info("=== Recognition Mode ===")
     
@@ -53,15 +54,29 @@ def run_recognition_mode(input_dir: Path, config_path: Path) -> int:
     
     logger.info(f"Found {len(step_files)} STEP file(s)")
     
-    # Create config with default/reference parameters for each file
+    # Create config with extracted parameters for each file
     config = Config()
+    
+    # Ensure output dir exists for images
+    output_dir.mkdir(parents=True, exist_ok=True)
+    
+    from .step_analyzer import analyze_step_file
     
     for step_file in step_files:
         logger.info(f"Processing: {step_file.name}")
         
-        # For now, use reference parameters as extracted values
-        # In a full implementation, we would parse the STEP file
-        params = REFERENCE_PARAMS.to_dict()
+        try:
+            # Extract parameters and generate image
+            image_path = output_dir / f"{step_file.stem}_dims.png"
+            
+            params_obj = analyze_step_file(step_file, image_path)
+            params = params_obj.to_dict()
+            logger.info("  -> Dimension extraction successful")
+        except Exception as e:
+            logger.error(f"  -> Extraction failed: {e}")
+            logger.warning("  -> Fallback to reference parameters")
+            params = REFERENCE_PARAMS.to_dict()
+            
         config.add_file(step_file.name, params)
     
     # Save config
@@ -72,6 +87,7 @@ def run_recognition_mode(input_dir: Path, config_path: Path) -> int:
     print(f"\n[Recognition Complete]")
     print(f"  Files processed: {len(step_files)}")
     print(f"  Config file: {config_path}")
+    print(f"  Images saved to: {output_dir}")
     print(f"\nEdit the config file to set desired parameter values,")
     print(f"then run with -e option to generate modified STEP files.")
     
@@ -198,12 +214,12 @@ def parse_args() -> argparse.Namespace:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Modes:
-  -r    Recognition mode: Extract dimensions, generate config.yaml
+  -r    Recognition mode: Extract dimensions, generate config.yaml + images
   -e    Edit mode: Apply config.yaml values to generate STEP files
   (none) Random mode: Randomize dimensions within valid ranges
 
 Examples:
-  python -m src.main -r          # Generate config.yaml from input STEPs
+  python -m src.main -r          # Generate config.yaml & images
   python -m src.main -e          # Edit STEPs using config.yaml
   python -m src.main             # Random edit within valid ranges
 """
@@ -250,7 +266,7 @@ def main() -> int:
         return 1
     
     if args.recognize:
-        return run_recognition_mode(args.input_dir, args.config)
+        return run_recognition_mode(args.input_dir, args.config, args.output_dir)
     elif args.edit:
         return run_edit_mode(args.input_dir, args.output_dir, args.config)
     else:
