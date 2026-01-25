@@ -19,6 +19,7 @@ from build123d import (
     BuildLine,
     Polyline,
     fillet,
+    TangentArc,
 )
 
 
@@ -188,47 +189,25 @@ def build_profile_face(params: ProfileParams) -> Face:
     Uses explicit TangentArc for R1 and R2 to ensure valid STEP geometry.
     """
     vertices = compute_vertices(params)
+    p12 = vertices[12]
+    p13 = vertices[13]
     
-    # Vertices indices:
-    # 0-9: Standard profile path
-    # 10: R1 Corner (Sharp)
-    # 11: R1 End Tangent
-    # 12: R2 Start Tangent
-    # 13: R2 End Tangent
-    # 14-15: Closing path
-    
-    p9 = vertices[9]
-    p10 = vertices[10] # Corner 1
-    p11 = vertices[11] # End of R1
-    p12 = vertices[12] # Start of R2
-    p13 = vertices[13] # End of R2
-    
-    # Calculate Start of R1 (on vertical segment P9->P10)
-    # P9 is above P10. We stop R1 short of P10.
-    p_r1_start = (p10[0], p10[1] + params.R1)
+    # Calculate corner between P12 and P13 (for R2 replacement)
+    # P12 is at (R2, y), P13 is at (0, y-R2)
+    # Corner is at (0, y) = (p13[0], p12[1])
+    p_corner2 = (p13[0], p12[1])
     
     with BuildSketch() as sketch:
         with BuildLine():
-            # 1. P0 to P9 (and down to R1 start)
-            # vertices[0:10] gives P0..P9. 
-            # We add p_r1_start to this chain.
-            Polyline(vertices[:10] + [p_r1_start])
+            # Create a single polyline connecting all points with sharp corners
+            # 0..12 includes P0..P12
+            # Add p_corner2 between P12 and P13
+            # Then P13..P15 and close to P0
             
-            # 2. Arc for R1 (90 deg turn) using TangentArc
-            # From p_r1_start to p11
-            TangentArc(p11)
-            
-            # 3. Line segment between fillets (P11 -> P12)
-            # This is the horizontal shelf floor
-            # Polyline needs a list, or Line for single segment
-            Polyline([p11, p12])
-            
-            # 4. Arc for R2 (90 deg turn)
-            # From P12 to P13
-            TangentArc(p13)
-            
-            # 5. Remaining path P13 -> P14 -> P15 -> P0 (close)
-            Polyline([p13] + vertices[14:] + [vertices[0]])
+            # P10 is naturally the corner for R1 (P9->P10->P11)
+            # So we just follow vertices indices effectively
+            pts = vertices[:13] + [p_corner2] + vertices[13:] + [vertices[0]]
+            Polyline(pts)
 
         make_face()
     
