@@ -14,6 +14,7 @@ import logging
 
 from build123d import import_step, Shape, Edge, GeomType, Face
 from src.geometry import build_profile_face, REFERENCE_PARAMS
+from src.step_analyzer import analyze_step_file
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -34,6 +35,11 @@ class TestGeometricFidelity(unittest.TestCase):
         
         logger.info(f"Loading reference: {cls.ref_path}")
         cls.ref_shape = import_step(str(cls.ref_path))
+
+        try:
+            cls.extracted_params = analyze_step_file(cls.ref_path)
+        except Exception as e:
+            raise unittest.SkipTest(f"Parameter extraction failed: {e}")
     
     def setUp(self):
         """Generate shape for each test."""
@@ -70,6 +76,26 @@ class TestGeometricFidelity(unittest.TestCase):
         self.assertLess(
             percent_diff, 1.0, 
             f"Area difference {percent_diff:.4f}% exceeds 1.0% limit"
+        )
+
+    def test_01b_extracted_params_area_difference(self):
+        """Recognition (-r) extracted parameters should be within 5% area error."""
+        ref_face = self._get_ref_face()
+        gen_face = build_profile_face(self.extracted_params)
+
+        area_ref = ref_face.area
+        area_gen = gen_face.area
+
+        diff = abs(area_ref - area_gen)
+        percent_diff = (diff / area_ref) * 100
+
+        logger.info(f"[Extracted] Ref Area: {area_ref:.6f}")
+        logger.info(f"[Extracted] Gen Area: {area_gen:.6f}")
+        logger.info(f"[Extracted] Diff: {diff:.6f} ({percent_diff:.4f}%)")
+
+        self.assertLess(
+            percent_diff, 5.0,
+            f"Extracted params area difference {percent_diff:.4f}% exceeds 5.0% limit"
         )
     
     def test_02_has_curved_edges(self):

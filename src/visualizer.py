@@ -6,26 +6,26 @@ using matplotlib.
 """
 
 from pathlib import Path
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 import matplotlib.pyplot as plt
-import matplotlib.patches as patches
 
 from build123d import Vertex
-from .geometry import ProfileParams
+from .geometry import ProfileParams, EdgeInfo
 
 def plot_profile_dims(
     vertices: List[Vertex], 
     params: ProfileParams, 
-    output_path: Path
+    output_path: Path,
+    edges: Optional[List[EdgeInfo]] = None
 ) -> None:
     """
     Generate and save a 2D Dimensioned Drawing image.
     
     Args:
         vertices: List of 16 vertices (P1..P15..P0 order typically from step_analyzer)
-                  Wait, step_analyzer returns P1..P15..P0.
         params: Extracted parameters to label
         output_path: Path to save the image
+        edges: Optional list of extracted edge geometries. If provided, used for plotting the shape.
     """
     
     # Extract (Y, Z) coordinates for plotting
@@ -38,7 +38,18 @@ def plot_profile_dims(
     ys, zs = zip(*coords)
     
     fig, ax = plt.subplots(figsize=(10, 10))
-    ax.plot(ys, zs, 'b-', linewidth=2, label='Profile')
+    
+    if edges:
+        # Plot using sampled edge points to preserve curves (incl. BSPLINE fillets)
+        for i, edge in enumerate(edges):
+            pts = edge.samples or [edge.start, edge.end]
+            y_vals = [p[0] for p in pts]
+            z_vals = [p[1] for p in pts]
+            ax.plot(y_vals, z_vals, 'b-', linewidth=2, label='Profile' if i == 0 else None)
+    else:
+        # Fallback to simple polylines
+        ax.plot(ys, zs, 'b-', linewidth=2, label='Profile')
+
     ax.scatter(ys, zs, color='red', s=20, zorder=5)
     
     # Helper to draw dimension line
@@ -112,14 +123,42 @@ def plot_profile_dims(
     # L9: P9-P10 (Z) -> idx 8-9
     draw_dim(8, 9, 'L9', offset=-0.05, axis='z')
     
-    # R1: P10-P11 corner
-    # Just label the point
-    ax.annotate(f"R1={params.R1}", xy=(ys[10], zs[10]), xytext=(ys[10]+0.2, zs[10]+0.2),
-                arrowprops=dict(arrowstyle='->', color='green'), color='green')
-                
-    # R2: P12-P13 corner
-    ax.annotate(f"R2={params.R2}", xy=(ys[12], zs[12]), xytext=(ys[12]+0.2, zs[12]-0.2),
-                arrowprops=dict(arrowstyle='->', color='green'), color='green')
+    # R labels (prefer anchor-based placement; fall back to bbox-based placement)
+    y_min, y_max = min(ys), max(ys)
+    z_min, z_max = min(zs), max(zs)
+
+    try:
+        origin_y = float(getattr(params, "origin_y", 0.0))
+        origin_z = float(getattr(params, "origin_z", 0.0))
+        shelf_inner_y = float(getattr(params, "shelf_inner_y", 0.6))
+        shelf_z = float(getattr(params, "shelf_z", 1.744))
+        corner_z = origin_z + shelf_z - float(params.L9)
+        inner_y = origin_y + shelf_inner_y
+        left_y = origin_y
+    except Exception:
+        corner_z = None
+        inner_y = (y_min + y_max) / 2
+        left_y = y_min
+
+    if getattr(params, "R1", 0.0) > 0:
+        r1_xy = (inner_y, corner_z) if corner_z is not None else (inner_y, (z_min + z_max) / 2)
+        ax.annotate(
+            f"R1={params.R1}",
+            xy=r1_xy,
+            xytext=(r1_xy[0] + 0.2, r1_xy[1] + 0.2),
+            arrowprops=dict(arrowstyle='->', color='green'),
+            color='green',
+        )
+
+    if getattr(params, "R2", 0.0) > 0:
+        r2_xy = (left_y, corner_z) if corner_z is not None else (y_min, z_min)
+        ax.annotate(
+            f"R2={params.R2}",
+            xy=r2_xy,
+            xytext=(r2_xy[0] + 0.2, r2_xy[1] - 0.2),
+            arrowprops=dict(arrowstyle='->', color='green'),
+            color='green',
+        )
     
     # L10: P14-P13 (Z) -> idx 13-12
     draw_dim(13, 12, 'L10', offset=-0.15, axis='z')

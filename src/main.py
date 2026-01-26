@@ -126,10 +126,7 @@ def run_edit_mode(input_dir: Path, output_dir: Path, config_path: Path) -> int:
             continue
         
         file_config = config.files[filename]
-        params_dict = file_config.get_param_dict()
-        params_dict['min_thickness'] = file_config.min_thickness
-        
-        params = ProfileParams.from_dict(params_dict)
+        params = ProfileParams.from_dict(file_config.get_profile_dict())
         output_path = output_dir / filename
         
         logger.info(f"Generating: {filename}")
@@ -181,10 +178,7 @@ def run_random_mode(input_dir: Path, output_dir: Path, config_path: Path) -> int
         filename = step_file.name
         file_config = config.files[filename]
         
-        params_dict = file_config.get_param_dict()
-        params_dict['min_thickness'] = file_config.min_thickness
-        
-        params = ProfileParams.from_dict(params_dict)
+        params = ProfileParams.from_dict(file_config.get_profile_dict())
         output_path = output_dir / filename
         
         logger.info(f"Generating: {filename}")

@@ -59,7 +59,7 @@ files:
         max: 0.5
       R2:
         description: fillet_bottom
-        value: 0.06
+        value: 0.2
         min: 0.05
         max: 0.5
     constraints:

@@ -24,9 +24,19 @@ PARAM_RANGES: Dict[str, Dict[str, float]] = {
     'L8': {'min': 0.1, 'max': 2.0, 'description': 'inner_shelf_y'},
     'L9': {'min': 0.1, 'max': 1.5, 'description': 'inner_shelf_z'},
     'L10': {'min': 0.3, 'max': 3.0, 'description': 'bottom_z'},
-    'R1': {'min': 0.05, 'max': 0.5, 'description': 'fillet_inner'},
-    'R2': {'min': 0.05, 'max': 0.5, 'description': 'fillet_bottom'},
+    'R1': {'min': 0.0, 'max': 0.5, 'description': 'fillet_inner'},
+    'R2': {'min': 0.0, 'max': 0.5, 'description': 'fillet_bottom'},
 }
+
+
+ANCHOR_KEYS = [
+    "outer_right_y",
+    "outer_top_z",
+    "shelf_inner_y",
+    "shelf_z",
+    "origin_y",
+    "origin_z",
+]
 
 
 @dataclass
@@ -69,11 +79,15 @@ class FileConfig:
     filename: str
     parameters: Dict[str, ParameterConfig] = field(default_factory=dict)
     min_thickness: float = 0.2
+    anchors: Dict[str, float] = field(default_factory=dict)
     
     def to_dict(self) -> dict:
+        constraints: Dict[str, Any] = {'min_thickness': self.min_thickness}
+        if self.anchors:
+            constraints['anchors'] = self.anchors
         return {
             'parameters': {k: v.to_dict() for k, v in self.parameters.items()},
-            'constraints': {'min_thickness': self.min_thickness},
+            'constraints': constraints,
         }
     
     @classmethod
@@ -84,12 +98,27 @@ class FileConfig:
         
         constraints = d.get('constraints', {})
         min_thickness = constraints.get('min_thickness', 0.2)
+        anchors = constraints.get('anchors', {}) or {}
+        if not isinstance(anchors, dict):
+            anchors = {}
         
-        return cls(filename=filename, parameters=params, min_thickness=min_thickness)
+        return cls(
+            filename=filename,
+            parameters=params,
+            min_thickness=min_thickness,
+            anchors=anchors,
+        )
     
     def get_param_dict(self) -> dict:
         """Get parameter values as simple dict."""
         return {k: v.value for k, v in self.parameters.items()}
+
+    def get_profile_dict(self) -> dict:
+        """Get parameter + constraint values as dict for ProfileParams."""
+        d = self.get_param_dict()
+        d['min_thickness'] = self.min_thickness
+        d.update(self.anchors)
+        return d
     
     def randomize_parameters(self) -> None:
         """Randomize all parameters within their ranges."""
@@ -150,7 +179,15 @@ def create_file_config(filename: str, current_params: dict) -> FileConfig:
             description=ranges['description'],
         )
     
-    return FileConfig(filename=filename, parameters=parameters)
+    anchors = {}
+    for key in ANCHOR_KEYS:
+        if key in current_params:
+            try:
+                anchors[key] = float(current_params[key])
+            except Exception:
+                pass
+
+    return FileConfig(filename=filename, parameters=parameters, anchors=anchors)
 
 
 def create_default_config(step_files: List[Path]) -> Config:
