@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python:*)",
+      "Bash(conda run -n b123d python -c:*)",
+      "Bash(powershell -Command:*)",
+      "Bash(where FreeCADCmd)",
+      "Bash(dir \"C:\\\\Program Files\\\\FreeCAD*\")",
+      "Bash(dir \"C:\\\\Users\\\\%USERNAME%\\\\AppData\\\\Local\\\\Programs\\\\FreeCAD*\")",
+      "Bash(conda run:*)",
+      "Bash(powershell:*)",
+      "Bash(cmd /c \"C:\\\\Users\\\\aokuni\\\\AppData\\\\Local\\\\miniforge3\\\\Scripts\\\\activate.bat fcad && python c:\\\\github_repo\\\\cad_automaton\\\\src\\\\proto2\\\\poc.py\")",
+      "Bash(cmd /c c:github_repocad_automatonrun_poc.bat)"
+    ]
+  }
+}

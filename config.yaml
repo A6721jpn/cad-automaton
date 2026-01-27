@@ -19,7 +19,7 @@ files:
         max: 2.0
       L4:
         description: upper_step_y
-        value: 0.3684
+        value: 0.368
         min: 0.1
         max: 1.0
       L5:
@@ -29,38 +29,45 @@ files:
         max: 2.0
       L6:
         description: outer_z
-        value: 0.6188
+        value: 0.619
         min: 0.1
         max: 2.0
       L7:
         description: lower_step_z
-        value: 0.6309
+        value: 0.631
         min: 0.1
         max: 2.0
       L8:
         description: inner_shelf_y
-        value: 0.6575
+        value: 0.657
         min: 0.1
         max: 2.0
       L9:
         description: inner_shelf_z
-        value: 0.4476
+        value: 0.698
         min: 0.1
         max: 1.5
       L10:
         description: bottom_z
-        value: 1.3087
+        value: 0.3
         min: 0.3
         max: 3.0
       R1:
         description: fillet_inner
         value: 0.25
-        min: 0.05
+        min: 0.0
         max: 0.5
       R2:
         description: fillet_bottom
         value: 0.2
-        min: 0.05
+        min: 0.0
         max: 0.5
     constraints:
       min_thickness: 0.2
+      anchors:
+        outer_right_y: 2.75
+        outer_top_z: 2.65
+        shelf_inner_y: 0.6
+        shelf_z: 1.7438
+        origin_y: 0.0
+        origin_z: 0.0
