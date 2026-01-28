@@ -8,7 +8,11 @@ CSVの寸法拘束リストは不変で、値だけ変更される前提。サ�
 ## 使い方
 
 ```
-"C:\Program Files\FreeCAD 1.0\bin\freecadcmd.exe" -c "c:\github_repo\cad_automaton\src\proto3-codex\run_proto3.py"
+# PowerShell
+.\run_proto3.ps1
+
+# Git Bash / WSL
+./run_proto3.sh
 ```
 
 `src/proto3-codex/proto3_args.json` は固定です:
@@ -37,7 +41,6 @@ CSVの寸法拘束リストは不変で、値だけ変更される前提。サ�
 ## 実行方法の補足
 
 FreeCADCmdが引数の解釈を誤るケースがあるため、`run_proto3.py`経由で実行してください。
-（直接 `apply_csv_to_surface.py` を実行する場合は `proto3_args.json` が必要です。）
 
 ## サーフェス検証
 

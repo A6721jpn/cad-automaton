@@ -162,7 +162,7 @@ def _load_args_from_env_or_file() -> List[str]:
         args_file = str(Path(__file__).resolve().parent / "proto3_args.json")
     if Path(args_file).exists():
         try:
-            data = json.loads(Path(args_file).read_text(encoding="utf-8"))
+            data = json.loads(Path(args_file).read_text(encoding="utf-8-sig"))
             if isinstance(data, list):
                 return [str(item) for item in data]
         except Exception:
@@ -184,9 +184,8 @@ def main() -> None:
     if not user_argv:
         user_argv = _load_args_from_env_or_file()
     if not user_argv:
-        raise SystemExit(
-            "No arguments provided. Use run_proto3.py or set PROTO3_ARGS_JSON/PROTO3_ARGS_FILE."
-        )
+        print("No arguments provided. Use run_proto3.py or set PROTO3_ARGS_FILE.")
+        _hard_exit(1)
 
     args = _parse_args(user_argv)
 
