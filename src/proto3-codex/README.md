@@ -30,13 +30,19 @@ CSVの寸法拘束リストは不変で、値だけ変更される前提。サ�
 - デフォルトのスケッチは最初の Sketcher::SketchObject。
 - デフォルトのサーフェスは `Name=Face` または `Label=SURFACE`。
 
+## CSVの最低限バリデーション
+
+- `Distance/DistanceX/DistanceY` は **0より大きい**
+- `Angle` は **0 < 角度 < 180**（度）
+- 数値が `NaN/Inf` ならエラー
+
 ## オプション
 
 - `--sketch` : SketchのName/Label指定
 - `--surface-name` : サーフェスのName指定（既定: Face）
 - `--surface-label` : サーフェスのLabel指定（既定: SURFACE）
 - `--dry-run` : 変更適用せず検証のみ
-- `--allow-missing` : CSV/スケッチの未一致を許容
+- `--allow-missing` : CSV/スケッチの未一致・無効値を許容
 
 ## 実行方法の補足
 
@@ -47,3 +53,7 @@ FreeCADCmdが引数の解釈を誤るケースがあるため、`run_proto3.py`�
 - shape is null/invalid のチェック
 - shape.check(True) の問題件数
 - 面積が 0 以下でないこと
+
+## Recomputeエラー検知
+
+- `obj.State` に `Invalid` / `RecomputeError` がある場合はエラー

@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import math
 import os
 import sys
 from pathlib import Path
@@ -51,9 +52,10 @@ def _set_constraint_value(sketch, index: int, value: float) -> None:
     sketch.setDatum(index, quantity)
 
 
-def _read_csv_values(path: Path) -> Tuple[Dict[str, float], List[str]]:
+def _read_csv_values(path: Path) -> Tuple[Dict[str, float], List[str], List[str]]:
     values: Dict[str, float] = {}
     missing_name_rows: List[str] = []
+    invalid_value_rows: List[str] = []
     with path.open("r", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         for row in reader:
@@ -67,9 +69,22 @@ def _read_csv_values(path: Path) -> Tuple[Dict[str, float], List[str]]:
             try:
                 value = float(raw_value)
             except Exception:
+                invalid_value_rows.append(str(row))
                 continue
+            ctype = (row.get("type") or "")
+            if not math.isfinite(value):
+                invalid_value_rows.append(str(row))
+                continue
+            if ctype in {"Distance", "DistanceX", "DistanceY"} and value <= 0:
+                invalid_value_rows.append(str(row))
+                continue
+            if ctype == "Angle":
+                if value <= 0 or value >= 180:
+                    invalid_value_rows.append(str(row))
+                    continue
+                value = math.radians(value)
             values[name] = value
-    return values, missing_name_rows
+    return values, missing_name_rows, invalid_value_rows
 
 
 def _find_surface(doc, name: Optional[str], label: Optional[str]):
@@ -118,6 +133,22 @@ def _check_surface(obj) -> Tuple[bool, List[str]]:
     except Exception as exc:
         issues.append(f"Area check failed: {exc}")
 
+    return len(issues) == 0, issues
+
+
+def _check_recompute(doc) -> Tuple[bool, List[str]]:
+    issues: List[str] = []
+    try:
+        objects = list(getattr(doc, "Objects", []))
+    except Exception:
+        objects = []
+    for obj in objects:
+        try:
+            state = getattr(obj, "State", None)
+            if state and any(flag in state for flag in ("Invalid", "RecomputeError")):
+                issues.append(f"{obj.Name} state={state}")
+        except Exception:
+            continue
     return len(issues) == 0, issues
 
 
@@ -189,7 +220,7 @@ def main() -> None:
 
     args = _parse_args(user_argv)
 
-    values, missing_name_rows = _read_csv_values(args.csv)
+    values, missing_name_rows, invalid_value_rows = _read_csv_values(args.csv)
     if missing_name_rows:
         print("CSV rows missing name:")
         for row in missing_name_rows:
@@ -197,6 +228,14 @@ def main() -> None:
         if not args.allow_missing:
             _quit_freecad(doc=None)
             print("Missing constraint names in CSV")
+            _hard_exit(2)
+    if invalid_value_rows:
+        print("CSV rows with invalid values:")
+        for row in invalid_value_rows:
+            print(f"  - {row}")
+        if not args.allow_missing:
+            _quit_freecad(doc=None)
+            print("Invalid constraint values in CSV")
             _hard_exit(2)
 
     doc = _open_document(args.fcstd)
@@ -226,6 +265,13 @@ def main() -> None:
         _hard_exit(0)
 
     doc.recompute()
+    ok_recompute, recompute_issues = _check_recompute(doc)
+    if not ok_recompute:
+        print("Recompute reported issues:")
+        for issue in recompute_issues:
+            print(f"  - {issue}")
+        _quit_freecad(doc)
+        _hard_exit(4)
 
     surface = _find_surface(doc, args.surface_name, args.surface_label)
     ok, issues = _check_surface(surface)
