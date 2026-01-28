@@ -1,9 +1,10 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import argparse
 import csv
 import json
 import os
+import sys
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -120,6 +121,27 @@ def _check_surface(obj) -> Tuple[bool, List[str]]:
     return len(issues) == 0, issues
 
 
+def _quit_freecad(doc=None) -> None:
+    if doc is not None:
+        try:
+            FreeCAD.closeDocument(doc.Name)
+        except Exception:
+            pass
+    try:
+        FreeCAD.quit()
+    except Exception:
+        pass
+
+
+def _hard_exit(code: int) -> None:
+    try:
+        sys.stdout.flush()
+        sys.stderr.flush()
+    except Exception:
+        pass
+    os._exit(code)
+
+
 def _parse_args(argv: List[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Apply CSV constraint values to a FreeCAD sketch and validate a surface.")
@@ -130,19 +152,11 @@ def _parse_args(argv: List[str]) -> argparse.Namespace:
     parser.add_argument("--surface-name", dest="surface_name", default="Face", help="Surface object Name")
     parser.add_argument("--surface-label", dest="surface_label", default="SURFACE", help="Surface object Label")
     parser.add_argument("--dry-run", action="store_true", help="Validate only; no write")
-    parser.add_argument("--strict", action="store_true", help="Fail if any constraint is missing")
+    parser.add_argument("--allow-missing", action="store_true", help="Allow missing CSV names or sketch constraints")
     return parser.parse_args(argv)
 
 
 def _load_args_from_env_or_file() -> List[str]:
-    raw = os.environ.get("PROTO3_ARGS_JSON", "").strip()
-    if raw:
-        try:
-            data = json.loads(raw)
-            if isinstance(data, list):
-                return [str(item) for item in data]
-        except Exception:
-            pass
     args_file = os.environ.get("PROTO3_ARGS_FILE", "").strip()
     if not args_file:
         args_file = str(Path(__file__).resolve().parent / "proto3_args.json")
@@ -181,8 +195,10 @@ def main() -> None:
         print("CSV rows missing name:")
         for row in missing_name_rows:
             print(f"  - {row}")
-        if args.strict:
-            raise SystemExit("Missing constraint names in CSV")
+        if not args.allow_missing:
+            _quit_freecad(doc=None)
+            print("Missing constraint names in CSV")
+            _hard_exit(2)
 
     doc = _open_document(args.fcstd)
     sketch = _find_sketch(doc, args.sketch)
@@ -200,12 +216,15 @@ def main() -> None:
         print("Missing constraint names in sketch:")
         for name in missing:
             print(f"  - {name}")
-        if args.strict:
-            raise SystemExit("Missing constraints in sketch")
+        if not args.allow_missing:
+            _quit_freecad(doc=None)
+            print("Missing constraints in sketch")
+            _hard_exit(3)
 
     if args.dry_run:
         print("Dry-run complete. No changes written.")
-        return
+        _quit_freecad(doc)
+        _hard_exit(0)
 
     doc.recompute()
 
@@ -215,10 +234,13 @@ def main() -> None:
         print("Surface check failed:")
         for issue in issues:
             print(f"  - {issue}")
-        raise SystemExit("Surface validation failed")
+        _quit_freecad(doc)
+        _hard_exit(4)
 
     doc.saveAs(str(args.out))
     print(f"Wrote: {args.out}")
+    _quit_freecad(doc)
+    _hard_exit(0)
 
 
 if __name__ == "__main__":

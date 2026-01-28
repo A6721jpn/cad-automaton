@@ -1,6 +1,6 @@
-[
+﻿[
   "c:\\github_repo\\cad_automaton\\ref\\TH1-ref.FCStd",
-  "c:\\github_repo\\cad_automaton\\temp\\_dims_distance_angle.csv",
+  "c:\\github_repo\\cad_automaton\\input\\dims.csv",
   "--out",
   "c:\\github_repo\\cad_automaton\\output\\TH1-ref-updated.FCStd"
 ]
