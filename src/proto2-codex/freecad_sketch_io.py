@@ -9,6 +9,33 @@ def _import_freecad():
         import FreeCAD  # type: ignore
         return FreeCAD
     except Exception as exc:
+        import os
+        import sys
+        from pathlib import Path
+
+        conda_prefix = os.environ.get(
+            "CONDA_PREFIX",
+            r"C:\Users\aokuni\AppData\Local\miniforge3\envs\fcad",
+        )
+        env_candidates = []
+        if conda_prefix:
+            env_candidates.append(Path(conda_prefix))
+        for name in ("fcad", "fcad-codex", "b123d"):
+            env_candidates.append(Path(r"C:\Users\aokuni\AppData\Local\miniforge3\envs") / name)
+        for env_path in env_candidates:
+            freecad_bin = env_path / "Library" / "bin"
+            freecad_lib = env_path / "Library" / "lib"
+            if not freecad_bin.exists():
+                continue
+            os.environ["PATH"] = str(freecad_bin) + os.pathsep + os.environ.get("PATH", "")
+            sys.path.insert(0, str(freecad_bin))
+            if freecad_lib.exists():
+                sys.path.insert(0, str(freecad_lib))
+            try:
+                import FreeCAD  # type: ignore
+                return FreeCAD
+            except Exception:
+                continue
         raise RuntimeError(
             "FreeCAD Python module not found. "
             "Run this script with FreeCAD's Python (e.g., FreeCADCmd) "
