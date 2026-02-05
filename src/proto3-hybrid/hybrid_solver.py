@@ -357,6 +357,53 @@ def _parse_args(argv: List[str]) -> argparse.Namespace:
     parser.add_argument("--shrink-trigger", type=float, default=0.2, help="Safe ratio threshold to shrink")
     parser.add_argument("--shrink-factor", type=float, default=0.5, help="Range shrink factor (0-1)")
     parser.add_argument("--shrink-window", type=int, default=500, help="Window size for safe ratio check")
+    parser.add_argument("--auto-expand", action="store_true", help="Auto-expand range if safe ratio is high")
+    parser.add_argument("--expand-trigger", type=float, default=0.8, help="Safe ratio threshold to expand")
+    parser.add_argument("--expand-factor", type=float, default=1.5, help="Range expand factor (>1)")
+    parser.add_argument("--expand-window", type=int, default=500, help="Window size for expansion check")
+    parser.add_argument(
+        "--expand-on-zero",
+        action="store_true",
+        help="Auto-expand if safe ratio is zero for a window",
+    )
+    parser.add_argument(
+        "--zero-expand-factor",
+        type=float,
+        default=2.0,
+        help="Expansion factor when expanding due to safe ratio zero",
+    )
+    parser.add_argument(
+        "--center-on-safe",
+        action="store_true",
+        help="Center shrink/expand ranges on median of safe samples in the window",
+    )
+    parser.add_argument(
+        "--safe-envelope",
+        action="store_true",
+        help="Use per-dimension min/max from safe samples as sampling bounds",
+    )
+    parser.add_argument(
+        "--safe-envelope-margin",
+        type=float,
+        default=0.0,
+        help="Margin added around safe envelope (ratio units)",
+    )
+    parser.add_argument(
+        "--envelope-fallback-global",
+        action="store_true",
+        help="If safe=0 for a window, temporarily sample from global ratio range",
+    )
+    parser.add_argument(
+        "--envelope-grow-on-zero",
+        type=float,
+        default=0.0,
+        help="Increase envelope margin when a window has safe=0 (ratio units)",
+    )
+    parser.add_argument(
+        "--recover-on-zero",
+        action="store_true",
+        help="If a window has safe=0, force next batch to pure random exploration",
+    )
     parser.add_argument("--ratio-min", type=float, default=0.7, help="Min ratio for sampling")
     parser.add_argument("--ratio-max", type=float, default=1.3, help="Max ratio for sampling")
     parser.add_argument("--seed", type=int, default=42, help="RNG seed")
@@ -418,6 +465,97 @@ def _sobol_samples(n: int, dims: int, low: float, high: float, seed: int):
     return qmc.scale(u, low, high)
 
 
+def _range_window(args: argparse.Namespace) -> Optional[int]:
+    if args.auto_shrink and args.auto_expand:
+        return max(1, min(args.shrink_window, args.expand_window))
+    if args.auto_shrink:
+        return max(1, args.shrink_window)
+    if args.auto_expand:
+        return max(1, args.expand_window)
+    return None
+
+
+def _update_range(
+    cur_min: float,
+    cur_max: float,
+    args: argparse.Namespace,
+    safe_ratio: float,
+    label: str,
+    *,
+    center_ratio: Optional[float] = None,
+    force_expand: bool = False,
+    expand_factor: Optional[float] = None,
+) -> Tuple[float, float]:
+    span = cur_max - cur_min
+    max_span = max(1e-9, args.ratio_max - args.ratio_min)
+    if args.auto_expand and force_expand:
+        factor = args.expand_factor if expand_factor is None else expand_factor
+        new_span = span * max(1.0, factor)
+        new_span = max(1e-6, min(max_span, new_span))
+        center = 1.0 if center_ratio is None else center_ratio
+        cur_min = max(args.ratio_min, center - new_span / 2)
+        cur_max = min(args.ratio_max, center + new_span / 2)
+        print(f"[{label}] auto-expand: safe_ratio=zero -> range=({cur_min:.3f},{cur_max:.3f})")
+        return cur_min, cur_max
+    if args.auto_shrink and safe_ratio < args.shrink_trigger:
+        new_span = span * max(0.05, min(1.0, args.shrink_factor))
+        new_span = max(1e-6, min(max_span, new_span))
+        center = 1.0 if center_ratio is None else center_ratio
+        cur_min = max(args.ratio_min, center - new_span / 2)
+        cur_max = min(args.ratio_max, center + new_span / 2)
+        print(f"[{label}] auto-shrink: safe_ratio={safe_ratio:.2f} -> range=({cur_min:.3f},{cur_max:.3f})")
+        return cur_min, cur_max
+    if args.auto_expand and (force_expand or safe_ratio > args.expand_trigger):
+        factor = args.expand_factor if expand_factor is None else expand_factor
+        new_span = span * max(1.0, factor)
+        new_span = max(1e-6, min(max_span, new_span))
+        center = 1.0 if center_ratio is None else center_ratio
+        cur_min = max(args.ratio_min, center - new_span / 2)
+        cur_max = min(args.ratio_max, center + new_span / 2)
+        reason = "zero" if force_expand else f"{safe_ratio:.2f}"
+        print(f"[{label}] auto-expand: safe_ratio={reason} -> range=({cur_min:.3f},{cur_max:.3f})")
+    return cur_min, cur_max
+
+
+def _center_ratio_from_block(X_block, y_block) -> Optional[float]:
+    ratios = []
+    for row, ok in zip(X_block, y_block):
+        if not ok:
+            continue
+        # Use per-sample mean ratio as a scalar center.
+        try:
+            ratios.append(float(sum(row) / len(row)))
+        except Exception:
+            continue
+    if not ratios:
+        return None
+    ratios.sort()
+    mid = len(ratios) // 2
+    if len(ratios) % 2 == 1:
+        return ratios[mid]
+    return (ratios[mid - 1] + ratios[mid]) / 2.0
+
+
+def _uniform_samples(n: int, low, high, seed: int):
+    np = _lazy_np()
+    rng = np.random.default_rng(seed)
+    return rng.uniform(low, high, size=(n, len(low)))
+
+
+def _safe_envelope(X, y, ratio_min: float, ratio_max: float, margin: float):
+    np = _lazy_np()
+    safe_mask = y == 1
+    safe_rows = X[safe_mask]
+    if safe_rows.size == 0:
+        return None, None
+    safe_min = safe_rows.min(axis=0)
+    safe_max = safe_rows.max(axis=0)
+    pad = max(0.0, margin)
+    low = np.maximum(ratio_min, safe_min - pad)
+    high = np.minimum(ratio_max, safe_max + pad)
+    return low, high
+
+
 def main() -> None:
     args = _parse_args(sys.argv[1:])
     print("[proto3-hybrid] start", flush=True)
@@ -476,31 +614,83 @@ def main() -> None:
             elapsed = time.perf_counter() - start_time
             print(f"[init] {i+1}/{init_n} evals, safe={int(y[:i+1].sum())}, elapsed={elapsed:.1f}s")
 
+    envelope_margin = args.safe_envelope_margin
+    if args.safe_envelope:
+        env_low, env_high = _safe_envelope(X, y, args.ratio_min, args.ratio_max, envelope_margin)
+
     remaining = budget - init_n
+
+    cur_min = args.ratio_min
+    cur_max = args.ratio_max
+    env_low = None
+    env_high = None
 
     # Simple (mixed) sampling phase
     simple_n = int(budget * max(0.0, min(1.0, args.simple_frac)))
     simple_n = min(simple_n, remaining)
     if simple_n > 0:
         print(f"[simple] sampling {simple_n} points before active learning")
-        cur_min = args.ratio_min
-        cur_max = args.ratio_max
-        X_simple = _sobol_samples(simple_n, dims, cur_min, cur_max, args.seed + 999)
+        window = _range_window(args)
+        X_simple = np.zeros((simple_n, dims), dtype=float)
         y_simple = np.zeros(simple_n, dtype=int)
-        for i in range(simple_n):
-            y_simple[i] = _apply_sample(doc, surface, specs, base_values, base_sketch_values, X_simple[i])
-            if (i + 1) % args.log_every == 0 or i + 1 == simple_n:
-                elapsed = time.perf_counter() - start_time
-                print(f"[simple] {i+1}/{simple_n} evals, safe={int(y_simple[:i+1].sum())}, elapsed={elapsed:.1f}s")
-            if args.auto_shrink and (i + 1) % args.shrink_window == 0:
-                window_safe = int(y_simple[i + 1 - args.shrink_window : i + 1].sum())
-                safe_ratio = window_safe / args.shrink_window
-                if safe_ratio < args.shrink_trigger:
-                    span = cur_max - cur_min
-                    new_span = span * max(0.05, min(1.0, args.shrink_factor))
-                    cur_min = max(args.ratio_min, 1.0 - new_span / 2)
-                    cur_max = min(args.ratio_max, 1.0 + new_span / 2)
-                    print(f"[simple] auto-shrink: safe_ratio={safe_ratio:.2f} -> range=({cur_min:.3f},{cur_max:.3f})")
+        next_idx = 0
+        block_id = 0
+        while next_idx < simple_n:
+            block = window or (simple_n - next_idx)
+            block = min(block, simple_n - next_idx)
+            if args.safe_envelope and env_low is not None and env_high is not None:
+                X_block = _uniform_samples(block, env_low, env_high, args.seed + 999 + block_id)
+            else:
+                X_block = _sobol_samples(block, dims, cur_min, cur_max, args.seed + 999 + block_id)
+            X_simple[next_idx : next_idx + block] = X_block
+            for j in range(block):
+                i = next_idx + j
+                y_simple[i] = _apply_sample(doc, surface, specs, base_values, base_sketch_values, X_simple[i])
+                if (i + 1) % args.log_every == 0 or i + 1 == simple_n:
+                    elapsed = time.perf_counter() - start_time
+                    print(f"[simple] {i+1}/{simple_n} evals, safe={int(y_simple[:i+1].sum())}, elapsed={elapsed:.1f}s")
+            if window:
+                window_safe = int(y_simple[next_idx : next_idx + block].sum())
+                safe_ratio = window_safe / block
+                center_ratio = None
+                if args.center_on_safe:
+                    center_ratio = _center_ratio_from_block(
+                        X_simple[next_idx : next_idx + block],
+                        y_simple[next_idx : next_idx + block],
+                    )
+                if args.expand_on_zero and window_safe == 0:
+                    if args.safe_envelope and args.envelope_grow_on_zero > 0:
+                        envelope_margin = min(
+                            args.ratio_max - args.ratio_min,
+                            envelope_margin + args.envelope_grow_on_zero,
+                        )
+                        env_low, env_high = _safe_envelope(
+                            X, y, args.ratio_min, args.ratio_max, envelope_margin
+                        )
+                    cur_min, cur_max = _update_range(
+                        cur_min,
+                        cur_max,
+                        args,
+                        safe_ratio,
+                        "simple",
+                        center_ratio=center_ratio,
+                        force_expand=True,
+                        expand_factor=args.zero_expand_factor,
+                    )
+                    if args.safe_envelope and args.envelope_fallback_global:
+                        env_low = None
+                        env_high = None
+                else:
+                    cur_min, cur_max = _update_range(
+                        cur_min,
+                        cur_max,
+                        args,
+                        safe_ratio,
+                        "simple",
+                        center_ratio=center_ratio,
+                    )
+            next_idx += block
+            block_id += 1
         X = np.vstack([X, X_simple])
         y = np.concatenate([y, y_simple])
         remaining -= simple_n
@@ -511,6 +701,7 @@ def main() -> None:
     RandomForestClassifier = _lazy_rf()
     iters = max(1, args.iters)
     batch = max(1, args.batch_size)
+    recover_random = False
     for it in range(iters):
         if remaining <= 0:
             break
@@ -529,42 +720,102 @@ def main() -> None:
         model.fit(X, y)
 
         cand_n = min(args.candidate_samples, 50000)
-        cur_min = args.ratio_min
-        cur_max = args.ratio_max
-        C = _sobol_samples(cand_n, dims, cur_min, cur_max, args.seed + it + 1)
-        p = model.predict_proba(C)[:, 1]
-        idx = np.argsort(np.abs(p - 0.5))
-        k = min(batch, remaining, len(idx))
-        explore_k = max(1, int(k * args.explore_frac))
-        exploit_k = k - explore_k
-        # Exploit: near-boundary points
-        X_exploit = C[idx[:exploit_k]] if exploit_k > 0 else np.empty((0, dims))
-        # Explore: random points from full space
-        X_explore = _sobol_samples(explore_k, dims, cur_min, cur_max, args.seed + it + 101)
-        X_new = np.vstack([X_exploit, X_explore]) if exploit_k > 0 else X_explore
+        k = min(batch, remaining)
+        window = _range_window(args)
         y_new = np.zeros(k, dtype=int)
-        for i in range(k):
-            y_new[i] = _apply_sample(doc, surface, specs, base_values, base_sketch_values, X_new[i])
-            if (i + 1) % args.log_every == 0 or i + 1 == k:
-                elapsed = time.perf_counter() - start_time
-                print(
-                    f"[iter {it+1}] {i+1}/{k} evals, "
-                    f"safe={int(y_new[:i+1].sum())}, "
-                    f"remaining={max(0, remaining - (i+1))}, "
-                    f"elapsed={elapsed:.1f}s"
+        X_new = np.zeros((k, dims), dtype=float)
+        next_idx = 0
+        block_id = 0
+        while next_idx < k:
+            block = window or (k - next_idx)
+            block = min(block, k - next_idx)
+            if args.safe_envelope and env_low is not None and env_high is not None:
+                C = _uniform_samples(cand_n, env_low, env_high, args.seed + it + 1 + block_id)
+            else:
+                C = _sobol_samples(cand_n, dims, cur_min, cur_max, args.seed + it + 1 + block_id)
+            p = model.predict_proba(C)[:, 1]
+            idx = np.argsort(np.abs(p - 0.5))
+            if recover_random:
+                explore_k = block
+                exploit_k = 0
+            else:
+                explore_k = max(1, int(block * args.explore_frac))
+                exploit_k = block - explore_k
+            X_exploit = C[idx[:exploit_k]] if exploit_k > 0 else np.empty((0, dims))
+            if args.safe_envelope and env_low is not None and env_high is not None:
+                X_explore = _uniform_samples(explore_k, env_low, env_high, args.seed + it + 101 + block_id)
+            else:
+                X_explore = _sobol_samples(
+                    explore_k, dims, cur_min, cur_max, args.seed + it + 101 + block_id
                 )
-            if args.auto_shrink and (i + 1) % args.shrink_window == 0:
-                window_safe = int(y_new[i + 1 - args.shrink_window : i + 1].sum())
-                safe_ratio = window_safe / args.shrink_window
-                if safe_ratio < args.shrink_trigger:
-                    span = cur_max - cur_min
-                    new_span = span * max(0.05, min(1.0, args.shrink_factor))
-                    cur_min = max(args.ratio_min, 1.0 - new_span / 2)
-                    cur_max = min(args.ratio_max, 1.0 + new_span / 2)
-                    print(f"[iter {it+1}] auto-shrink: safe_ratio={safe_ratio:.2f} -> range=({cur_min:.3f},{cur_max:.3f})")
+            X_block = np.vstack([X_exploit, X_explore]) if exploit_k > 0 else X_explore
+            if X_block.shape[0] > block:
+                X_block = X_block[:block]
+            X_new[next_idx : next_idx + block] = X_block
+            for j in range(block):
+                i = next_idx + j
+                y_new[i] = _apply_sample(doc, surface, specs, base_values, base_sketch_values, X_new[i])
+                if (i + 1) % args.log_every == 0 or i + 1 == k:
+                    elapsed = time.perf_counter() - start_time
+                    print(
+                        f"[iter {it+1}] {i+1}/{k} evals, "
+                        f"safe={int(y_new[:i+1].sum())}, "
+                        f"remaining={max(0, remaining - (i+1))}, "
+                        f"elapsed={elapsed:.1f}s"
+                    )
+            if window:
+                window_safe = int(y_new[next_idx : next_idx + block].sum())
+                safe_ratio = window_safe / block
+                center_ratio = None
+                if args.center_on_safe:
+                    center_ratio = _center_ratio_from_block(
+                        X_new[next_idx : next_idx + block],
+                        y_new[next_idx : next_idx + block],
+                    )
+                if args.expand_on_zero and window_safe == 0:
+                    if args.safe_envelope and args.envelope_grow_on_zero > 0:
+                        envelope_margin = min(
+                            args.ratio_max - args.ratio_min,
+                            envelope_margin + args.envelope_grow_on_zero,
+                        )
+                        env_low, env_high = _safe_envelope(
+                            X, y, args.ratio_min, args.ratio_max, envelope_margin
+                        )
+                    cur_min, cur_max = _update_range(
+                        cur_min,
+                        cur_max,
+                        args,
+                        safe_ratio,
+                        f"iter {it+1}",
+                        center_ratio=center_ratio,
+                        force_expand=True,
+                        expand_factor=args.zero_expand_factor,
+                    )
+                    if args.safe_envelope and args.envelope_fallback_global:
+                        # Drop envelope for next block to re-explore globally.
+                        env_low = None
+                        env_high = None
+                    if args.recover_on_zero:
+                        recover_random = True
+                else:
+                    cur_min, cur_max = _update_range(
+                        cur_min,
+                        cur_max,
+                        args,
+                        safe_ratio,
+                        f"iter {it+1}",
+                        center_ratio=center_ratio,
+                    )
+                    recover_random = False
+            next_idx += block
+            block_id += 1
         X = np.vstack([X, X_new])
         y = np.concatenate([y, y_new])
         remaining -= k
+        if args.safe_envelope:
+            env_low, env_high = _safe_envelope(
+                X, y, args.ratio_min, args.ratio_max, args.safe_envelope_margin
+            )
         if int(y_new.sum()) == 0:
             # If no safe samples found, tighten sampling around base ratios.
             narrow = max(0.02, args.narrow_ratio)
