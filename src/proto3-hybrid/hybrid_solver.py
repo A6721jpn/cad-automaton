@@ -729,29 +729,39 @@ def main() -> None:
         while next_idx < k:
             block = window or (k - next_idx)
             block = min(block, k - next_idx)
-            if args.safe_envelope and env_low is not None and env_high is not None:
-                C = _uniform_samples(cand_n, env_low, env_high, args.seed + it + 1 + block_id)
-            else:
-                C = _sobol_samples(cand_n, dims, cur_min, cur_max, args.seed + it + 1 + block_id)
-            p = model.predict_proba(C)[:, 1]
-            idx = np.argsort(np.abs(p - 0.5))
             if recover_random:
-                explore_k = block
-                exploit_k = 0
+                X_block = _sobol_samples(
+                    block,
+                    dims,
+                    args.ratio_min,
+                    args.ratio_max,
+                    args.seed + it + 5000 + block_id,
+                )
+                X_new[next_idx : next_idx + block] = X_block
+                if (next_idx + block) % args.log_every == 0 or next_idx + block == k:
+                    print(f"[iter {it+1}] recover-random block={block}")
+                recover_random = False
             else:
+                if args.safe_envelope and env_low is not None and env_high is not None:
+                    C = _uniform_samples(cand_n, env_low, env_high, args.seed + it + 1 + block_id)
+                else:
+                    C = _sobol_samples(cand_n, dims, cur_min, cur_max, args.seed + it + 1 + block_id)
+                p = model.predict_proba(C)[:, 1]
+                idx = np.argsort(np.abs(p - 0.5))
                 explore_k = max(1, int(block * args.explore_frac))
                 exploit_k = block - explore_k
-            X_exploit = C[idx[:exploit_k]] if exploit_k > 0 else np.empty((0, dims))
-            if args.safe_envelope and env_low is not None and env_high is not None:
-                X_explore = _uniform_samples(explore_k, env_low, env_high, args.seed + it + 101 + block_id)
-            else:
-                X_explore = _sobol_samples(
-                    explore_k, dims, cur_min, cur_max, args.seed + it + 101 + block_id
-                )
-            X_block = np.vstack([X_exploit, X_explore]) if exploit_k > 0 else X_explore
-            if X_block.shape[0] > block:
-                X_block = X_block[:block]
-            X_new[next_idx : next_idx + block] = X_block
+                X_exploit = C[idx[:exploit_k]] if exploit_k > 0 else np.empty((0, dims))
+                if args.safe_envelope and env_low is not None and env_high is not None:
+                    X_explore = _uniform_samples(explore_k, env_low, env_high, args.seed + it + 101 + block_id)
+                else:
+                    X_explore = _sobol_samples(
+                        explore_k, dims, cur_min, cur_max, args.seed + it + 101 + block_id
+                    )
+                X_block = np.vstack([X_exploit, X_explore]) if exploit_k > 0 else X_explore
+                if X_block.shape[0] > block:
+                    X_block = X_block[:block]
+                X_new[next_idx : next_idx + block] = X_block
+            
             for j in range(block):
                 i = next_idx + j
                 y_new[i] = _apply_sample(doc, surface, specs, base_values, base_sketch_values, X_new[i])
