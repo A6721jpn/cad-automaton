@@ -144,6 +144,15 @@ def _quit_freecad(doc=None) -> None:
         pass
 
 
+def _reload_document(fcstd: Path, sketch_hint: Optional[str], surface_name: Optional[str], surface_label: Optional[str], specs: List[ConstraintSpec]):
+    doc = _open_document(fcstd)
+    sketch = _find_sketch(doc, sketch_hint)
+    for spec in specs:
+        spec.sketch = sketch
+    surface = _find_surface(doc, surface_name, surface_label)
+    return doc, surface
+
+
 def _load_template(path: Path) -> dict:
     text = path.read_text(encoding="utf-8")
     if path.suffix.lower() in {".yaml", ".yml"}:
@@ -403,6 +412,17 @@ def _parse_args(argv: List[str]) -> argparse.Namespace:
         "--recover-on-zero",
         action="store_true",
         help="If a window has safe=0, force next batch to pure random exploration",
+    )
+    parser.add_argument(
+        "--reset-on-zero",
+        action="store_true",
+        help="If safe=0 persists, reload the FreeCAD document and reset constraints",
+    )
+    parser.add_argument(
+        "--reset-zero-window",
+        type=int,
+        default=3,
+        help="Number of consecutive zero windows before reset",
     )
     parser.add_argument("--ratio-min", type=float, default=0.7, help="Min ratio for sampling")
     parser.add_argument("--ratio-max", type=float, default=1.3, help="Max ratio for sampling")
@@ -702,6 +722,7 @@ def main() -> None:
     iters = max(1, args.iters)
     batch = max(1, args.batch_size)
     recover_random = False
+    zero_streak = 0
     for it in range(iters):
         if remaining <= 0:
             break
@@ -807,6 +828,18 @@ def main() -> None:
                         env_high = None
                     if args.recover_on_zero:
                         recover_random = True
+                    zero_streak += 1
+                    if args.reset_on_zero and zero_streak >= max(1, args.reset_zero_window):
+                        print(f"[iter {it+1}] reset-on-zero: reloading document")
+                        _quit_freecad(doc)
+                        doc, surface = _reload_document(
+                            args.fcstd,
+                            args.sketch,
+                            args.surface_name,
+                            args.surface_label,
+                            specs,
+                        )
+                        zero_streak = 0
                 else:
                     cur_min, cur_max = _update_range(
                         cur_min,
@@ -817,6 +850,7 @@ def main() -> None:
                         center_ratio=center_ratio,
                     )
                     recover_random = False
+                    zero_streak = 0
             next_idx += block
             block_id += 1
         X = np.vstack([X, X_new])
