@@ -99,6 +99,15 @@
 - `environment.yml`（Conda環境）
 - `artifacts/`（モデル・前処理・メトリクス保存）
 
+## 9.1 クイックスタート
+```bash
+cd src/ai-v0
+conda env create -f environment.yml
+conda activate ai-v0
+python train.py
+python predict.py --input proto3-hybrid_samples.csv --output predictions.csv
+```
+
 ## 10. 運用ポリシー
 - まずは「説明可能で再現可能」な最小構成を優先
 - 精度改善は、ベースラインが安定してから段階的に実施

@@ -19,6 +19,7 @@ input/*
 !input/.gitkeep
 ref/*
 !ref/.gitkeep
+src/ai-v0/artifacts/
 
 # IDEs
 .idea/
