@@ -47,3 +47,5 @@ conda run -n ai python src/ai-v0/merge_samples.py --inputs src/ai-v0/proto3-hybr
 
 - FreeCAD内蔵Pythonで実行されるため、Active Learningにはsklearn不要のフォールバック動作
 - 生成には5000サンプルで約5-10分かかる（マシン性能による）
+- **実際の出力先**: `temp/proto3-hybrid_samples.csv`（hybrid_solverの仕様）
+- `--output`で指定した場所には寸法範囲サマリのみ出力される
