@@ -1,0 +1,10 @@
+{
+  "n_layers": 3,
+  "n_units_l0": 55,
+  "n_units_l1": 200,
+  "n_units_l2": 107,
+  "alpha": 0.011180307377391447,
+  "learning_rate_init": 0.0027114499578187678,
+  "batch_size": 64,
+  "activation": "relu"
+}
