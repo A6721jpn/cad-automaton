@@ -1,14 +1,15 @@
 {
-  "accuracy": 0.8772666666666666,
-  "f1": 0.907408338781874,
-  "roc_auc": 0.8961824321729982,
+  "accuracy": 0.8265,
+  "f1": 0.8596845936109988,
+  "roc_auc": 0.8637188095591742,
   "best_params": {
-    "n_layers": 2,
-    "n_units_l0": 32,
-    "n_units_l1": 37,
-    "alpha": 0.0007526093064331545,
-    "learning_rate_init": 0.0001094286754524124,
-    "batch_size": 64,
-    "activation": "tanh"
+    "n_layers": 3,
+    "n_units_l0": 82,
+    "n_units_l1": 83,
+    "n_units_l2": 246,
+    "alpha": 0.030563949269376542,
+    "learning_rate_init": 0.0005792219377088149,
+    "batch_size": 128,
+    "activation": "relu"
   }
 }

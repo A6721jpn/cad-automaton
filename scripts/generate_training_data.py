@@ -13,8 +13,13 @@ import argparse
 import sys
 from pathlib import Path
 
-# リポジトリルートを取得
-REPO_ROOT = Path(__file__).resolve().parents[1]
+# リポジトリルートを取得（__file__がない場合はsys.argv[0]を使用）
+try:
+    _script_path = Path(__file__).resolve()
+except NameError:
+    _script_path = Path(sys.argv[0]).resolve() if sys.argv else Path.cwd() / "generate_training_data.py"
+
+REPO_ROOT = _script_path.parents[1]
 
 # デフォルトパス
 DEFAULT_FCSTD = REPO_ROOT / "ref" / "TH1-ref.FCStd"
@@ -27,6 +32,10 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Generate training data for ai-v0 using proto3-hybrid",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    parser.add_argument(
+        "--config", type=Path, default=None,
+        help="JSON config file (overrides other args)"
     )
     parser.add_argument(
         "--samples", type=int, default=5000,
@@ -72,7 +81,30 @@ def parse_args() -> argparse.Namespace:
         "--seed", type=int, default=42,
         help="Random seed"
     )
-    return parser.parse_args()
+    
+    # First check for config file
+    args = parser.parse_args()
+    
+    # Load from config file if provided or if default exists
+    config_file = args.config or (REPO_ROOT / "scripts" / "generate_config.json")
+    if config_file.exists():
+        import json
+        with open(config_file, "r", encoding="utf-8") as f:
+            config = json.load(f)
+        print(f"[generate_training_data] Loading config from {config_file}")
+        args.samples = config.get("samples", args.samples)
+        args.output = Path(config.get("output", str(args.output)))
+        args.fcstd = Path(config.get("fcstd", str(args.fcstd)))
+        args.dims = Path(config.get("dims", str(args.dims)))
+        args.template = Path(config.get("template", str(args.template)))
+        args.ratio_min = config.get("ratio_min", args.ratio_min)
+        args.ratio_max = config.get("ratio_max", args.ratio_max)
+        args.init_samples = config.get("init_samples", args.init_samples)
+        args.batch_size = config.get("batch_size", args.batch_size)
+        args.iters = config.get("iters", args.iters)
+        args.seed = config.get("seed", args.seed)
+    
+    return args
 
 
 def main() -> None:

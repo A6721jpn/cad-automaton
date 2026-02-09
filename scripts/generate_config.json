@@ -1,0 +1,13 @@
+{
+    "samples": 20000,
+    "output": "c:/github_repo/cad_automaton/src/ai-v0/boundary_samples.csv",
+    "fcstd": "c:/github_repo/cad_automaton/ref/TH1-ref.FCStd",
+    "dims": "c:/github_repo/cad_automaton/input/dims_deg.csv",
+    "template": "c:/github_repo/cad_automaton/temp/constraints.json",
+    "ratio_min": 0.78,
+    "ratio_max": 1.22,
+    "init_samples": 2000,
+    "batch_size": 1000,
+    "iters": 15,
+    "seed": 42
+}

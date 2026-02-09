@@ -1,9 +1,10 @@
 {
-  "n_layers": 2,
-  "n_units_l0": 32,
-  "n_units_l1": 37,
-  "alpha": 0.0007526093064331545,
-  "learning_rate_init": 0.0001094286754524124,
-  "batch_size": 64,
-  "activation": "tanh"
+  "n_layers": 3,
+  "n_units_l0": 82,
+  "n_units_l1": 83,
+  "n_units_l2": 246,
+  "alpha": 0.030563949269376542,
+  "learning_rate_init": 0.0005792219377088149,
+  "batch_size": 128,
+  "activation": "relu"
 }
