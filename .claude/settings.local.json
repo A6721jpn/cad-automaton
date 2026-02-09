@@ -10,7 +10,16 @@
       "Bash(conda run:*)",
       "Bash(powershell:*)",
       "Bash(cmd /c \"C:\\\\Users\\\\aokuni\\\\AppData\\\\Local\\\\miniforge3\\\\Scripts\\\\activate.bat fcad && python c:\\\\github_repo\\\\cad_automaton\\\\src\\\\proto2\\\\poc.py\")",
-      "Bash(cmd /c c:github_repocad_automatonrun_poc.bat)"
+      "Bash(cmd /c c:github_repocad_automatonrun_poc.bat)",
+      "Bash(conda info:*)",
+      "Bash(conda env list:*)",
+      "Bash(source:*)",
+      "Bash(conda activate:*)",
+      "Bash(pip3 list:*)",
+      "Bash(conda list:*)",
+      "Bash(conda install:*)",
+      "Bash(pip install:*)",
+      "Bash(python3:*)"
     ]
   }
 }

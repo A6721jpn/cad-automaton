@@ -1,0 +1,35 @@
+{
+  "best_optuna_auc": 0.8993053072269217,
+  "best_params": {
+    "n_layers": 5,
+    "layer_0_size": 32,
+    "layer_1_size": 32,
+    "layer_2_size": 32,
+    "layer_3_size": 32,
+    "layer_4_size": 32,
+    "alpha": 0.018403091452073726,
+    "learning_rate_init": 0.003303627103289726,
+    "batch_size": 128
+  },
+  "architecture": [
+    32,
+    32,
+    32,
+    32,
+    32
+  ],
+  "test_metrics": {
+    "accuracy": 0.8774,
+    "recall_safe": 0.9231656184486373,
+    "recall_unsafe": 0.7974358974358975,
+    "f1": 0.9054644527836323,
+    "roc_auc": 0.9002665660684528
+  },
+  "baseline_metrics": {
+    "accuracy": 0.8766,
+    "recall_safe": 0.9364779874213837,
+    "recall_unsafe": 0.771978021978022,
+    "f1": 0.9061311425528678,
+    "roc_auc": 0.894079507145545
+  }
+}
